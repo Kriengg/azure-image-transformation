@@ -1,13 +1,24 @@
 import os
 import azure.functions as func
 import logging
-from azure.storage.blob import BlobServiceClient, ContainerClient
+from azure.storage.blob import BlobServiceClient
 from PIL import Image
 import io
 
-# Initialize the BlobServiceClient using environment variables
+# Initialize BlobServiceClient and container clients
 connection_string = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+if not connection_string:
+    raise ValueError("AZURE_STORAGE_CONNECTION_STRING environment variable is not set")
+
 blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+assets_container_client = blob_service_client.get_container_client("assets")
+output_container_client = blob_service_client.get_container_client("assetsoutput")
+
+# Ensure the output container exists
+try:
+    output_container_client.create_container()
+except Exception as e:
+    logging.info(f"Container 'assetsoutput' already exists or could not be created: {e}")
 
 # Mapping of file extensions to MIME types
 MIME_TYPES = {
@@ -35,6 +46,11 @@ def dynamicmediahandler(req: func.HttpRequest) -> func.HttpResponse:
             status_code=400
         )
 
+    # Check if the filename has an extension
+    if '.' not in filename:
+        logging.info(f"Filename does not have an extension. Using default image.")
+        filename = "no-image.jpg"
+
     # Determine the MIME type based on the file extension
     original_extension = filename.split('.')[-1].upper()
     mimetype = MIME_TYPES.get(original_extension, "application/octet-stream")
@@ -43,7 +59,7 @@ def dynamicmediahandler(req: func.HttpRequest) -> func.HttpResponse:
     output_filename = f"{filename.split('.')[0]}_{width}_{height}.{format.lower() if format else original_extension.lower()}"
 
     # Check if the transformed image already exists in the output container
-    output_blob_client = blob_service_client.get_blob_client(container="assetsoutput", blob=output_filename)
+    output_blob_client = output_container_client.get_blob_client(blob=output_filename)
     try:
         output_blob_data = output_blob_client.download_blob().readall()
         logging.info(f"Transformed image already exists: {output_filename}")
@@ -54,11 +70,11 @@ def dynamicmediahandler(req: func.HttpRequest) -> func.HttpResponse:
                 "Content-Disposition": f"inline; filename={output_filename}"
             }
         )
-    except Exception as e:
+    except Exception:
         logging.info(f"Transformed image does not exist: {output_filename}. Proceeding with transformation.")
 
-    # Get the blob from the storage account
-    blob_client = blob_service_client.get_blob_client(container="assets", blob=filename)
+    # Attempt to download the original image from the assets container
+    blob_client = assets_container_client.get_blob_client(blob=filename)
     try:
         logging.info(f"Attempting to download blob: {filename} from container: assets")
         blob_data = blob_client.download_blob().readall()
@@ -67,7 +83,7 @@ def dynamicmediahandler(req: func.HttpRequest) -> func.HttpResponse:
         logging.error(f"Error downloading blob: {e}. Using default image.")
         # Use default image if the specified image is not found
         default_filename = "no-image.jpg"
-        blob_client = blob_service_client.get_blob_client(container="assets", blob=default_filename)
+        blob_client = assets_container_client.get_blob_client(blob=default_filename)
         try:
             blob_data = blob_client.download_blob().readall()
             logging.info(f"Successfully downloaded default image: {default_filename}")
@@ -93,20 +109,22 @@ def dynamicmediahandler(req: func.HttpRequest) -> func.HttpResponse:
         logging.info(f"Original image size: {image.size}")
         original_width, original_height = image.size
 
+        # Resize the image according to parameters, avoiding upscaling
         if width and height:
             width = int(width)
             height = int(height)
-            image = image.resize((width, height))
+            image.thumbnail((width, height))
         elif width:
             width = int(width)
             height = int(original_height * (width / original_width))
-            image = image.resize((width, height))
+            image.thumbnail((width, height))
         elif height:
             height = int(height)
             width = int(original_width * (height / original_height))
-            image = image.resize((width, height))
+            image.thumbnail((width, height))
         logging.info(f"Transformed image size: {image.size}")
 
+        # Determine the format for saving
         if format:
             format = format.upper()
             if format == "JPG":
@@ -131,13 +149,6 @@ def dynamicmediahandler(req: func.HttpRequest) -> func.HttpResponse:
         output = io.BytesIO()
         image.save(output, format=format)
         output.seek(0)
-
-        # Ensure the output container exists
-        output_container_client = blob_service_client.get_container_client("assetsoutput")
-        try:
-            output_container_client.create_container()
-        except Exception as e:
-            logging.info(f"Container 'assetsoutput' already exists or could not be created: {e}")
 
         # Upload the transformed image to the output container
         output_blob_client.upload_blob(output, overwrite=True)
