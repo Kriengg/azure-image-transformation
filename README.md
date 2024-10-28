@@ -15,6 +15,7 @@ or pass code in header
 
 
  2)Added Rule:
- ![image](https://github.com/user-attachments/assets/59e35844-0146-49a3-87b4-ebe7f73b4907)
+ ![image](https://github.com/user-attachments/assets/b6550715-bfe4-485a-bf3d-98cddcf03531)
+
 
  
