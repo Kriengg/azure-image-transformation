@@ -1,10 +1,10 @@
 Test via cdn:https://mydynamicmediacdnendpoint.azureedge.net/api/dynamicmediahandler?filename=product1.jpg&width=700&height=500&format=png
 
-Test via Az fun:https://myfunctionappdynamic.azurewebsites.net/api/dynamicmediahandler?filename=product3.jpg&code=abc 
+Test via Az fun:https://mycdn.azurewebsites.net/api/dynamicmediahandler?filename=product3.jpg&code=abc 
 or pass code in header
- https://myfunctionappdynamic.azurewebsites.net/api/dynamicmediahandler?filename=product1.jpg&width=800&height=300&format=png" -H "x-functions-key: F8Rd
+ https://myfunctionappdynamic.azurewebsites.net/api/dynamicmediahandler?filename=product1.jpg&width=800&height=300&format=png" -H "x-functions-key: abc
 
- When I created this mydynamicmediacdnendpoint I did 2 things
+ When I created this mycdnendpoint I did 2 things
 
 
  
